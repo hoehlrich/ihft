@@ -2,6 +2,7 @@
 The perfect program to manage what you do when *yhft*
 
 ## Usage
+```
 Usage: ihft [COMMAND]
 
 Commands:
@@ -13,6 +14,7 @@ Commands:
 Options:
   -h, --help     Print help information
   -V, --version  Print version information
+```
 
 ## Installation
 From source (your only option):
