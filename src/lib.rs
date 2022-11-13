@@ -5,36 +5,69 @@ use std::fs;
 use rand::prelude::*;
 
 pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
-    let mut store = Store::new()?;
+    // Load and create directory
+    let ihft_dir = format!("{}/.local/share/ihft", env::var("HOME")?);
+    fs::create_dir_all(&ihft_dir)?;
+
+    let data = Data::new(ihft_dir)?;
 
     // Handle command
     match args.command {
-        Some(Commands::Add { thing }) => add(store, thing),
-        Some(Commands::List) => list(store),
-        Some(Commands::Remove { thing }) => remove(store, thing),
-        None => store.get_one(),
+        Some(Commands::Add { thing }) => add(data, thing),
+        Some(Commands::List) => list(data),
+        Some(Commands::Remove { thing }) => remove(data, thing),
+        None => ihft(data),
     }?;
     Ok(())
 }
 
-fn add(mut store: Store, thing: Option<String>) -> Result<(), Box<dyn Error>> {
+fn add(mut data: Data, thing: Option<String>) -> Result<(), Box<dyn Error>> {
     match thing {
-        Some(t) => store.insert(t)?,
+        Some(t) => {
+            data.things.insert(&t)?;
+            data.hist.insert(&format!("add {}", &t))?;
+        },
         None => (),
     }
     Ok(())
 }
 
-fn list(store: Store) -> Result<(), Box<dyn Error>> {
-    for v in store.data {
+fn list(data: Data) -> Result<(), Box<dyn Error>> {
+    for v in &data.things.data {
         println!("{}", v);
+    }
+    if &data.things.data.len() == &(0 as usize) {
+        println!("No things stored");
     }
     Ok(())
 }
 
-fn remove(mut store: Store, thing: String) -> Result<(), Box<dyn Error>> {
-    store.remove(&thing)?;
+fn remove(mut data: Data, thing: String) -> Result<(), Box<dyn Error>> {
+    match data.things.remove(&thing) {
+        Ok(_) => data.hist.insert(&format!("add {}", &thing)),
+        Err(e) => Err(e),
+    }
+}
+
+fn ihft(mut data: Data) -> Result<(), Box<dyn Error>> {
+    data.things.get_one()?;
     Ok(())
+}
+
+struct Data {
+    things: Store,
+    hist: Store,
+}
+
+impl Data {
+    fn new(ihft_dir: String) -> Result<Data, Box<dyn Error>> {
+        Ok(
+            Data {
+                things: Store::new(&ihft_dir, &String::from("things"))?,
+                hist: Store::new(&ihft_dir, &String::from("hist"))?,
+            }
+            )
+    }
 }
 
 struct Store {
@@ -43,11 +76,9 @@ struct Store {
 }
 
 impl Store {
-    fn new() -> Result<Store, Box<dyn Error>> {
+    fn new(ihft_dir: &String, file: &String) -> Result<Store, Box<dyn Error>> {
         // Do file stuff
-        let ihft_dir = format!("{}/.ihft", env::var("HOME")?);
-        let ihft_store = format!("{}/store.txt", &ihft_dir);
-        fs::create_dir_all(&ihft_dir)?;
+        let ihft_store = format!("{}/{}", ihft_dir, file);
 
         // Create file if it doesn't exist
         match fs::File::open(&ihft_store) {
@@ -93,8 +124,8 @@ impl Store {
         Ok(())
     }
 
-    fn insert(&mut self, thing: String) -> Result<(), Box<dyn Error>> {
-        self.data.push(thing);
+    fn insert(&mut self, thing: &String) -> Result<(), Box<dyn Error>> {
+        self.data.insert(0, thing.to_string());
         self.write()?;
         Ok(())
     }
@@ -109,6 +140,7 @@ impl Store {
         Ok(())
     }
 }
+
 
 #[derive(Parser)]
 #[clap(author, version, about)]
