@@ -16,6 +16,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
         Some(Commands::Add { thing }) => add(data, thing),
         Some(Commands::List) => list(data),
         Some(Commands::Remove { thing }) => remove(data, thing),
+        Some(Commands::Undo) => undo(data),
         None => ihft(data),
     }?;
     Ok(())
@@ -44,13 +45,44 @@ fn list(data: Data) -> Result<(), Box<dyn Error>> {
 
 fn remove(mut data: Data, thing: String) -> Result<(), Box<dyn Error>> {
     match data.things.remove(&thing) {
-        Ok(_) => data.hist.insert(&format!("add {}", &thing)),
+        Ok(_) => data.hist.insert(&format!("remove {}", &thing)),
         Err(e) => Err(e),
     }
 }
 
+fn undo(mut data: Data) -> Result<(), Box<dyn Error>> {
+    let mut i = match data.hist.data.first() {
+        Some(v) => v.split(' '),
+        None => return Err("nothing to undo".into()),
+    };
+
+    let cmd = match i.next() {
+        Some(v) => v,
+        None => return Err("hist file corrupted".into()),
+    };
+
+    let v = match i.next() {
+        Some(v) => v.to_string(),
+        None => return Err("hist file corrupted".into()),
+    };
+
+    match cmd {
+        "add" => data.things.remove(&v),
+        "remove" => data.things.insert(&v),
+        _ => return Err("hist file corrupted".into()),
+    }?;
+
+    data.hist.data.remove(0);
+    data.hist.write()?;
+    
+    Ok(())
+}
+
 fn ihft(mut data: Data) -> Result<(), Box<dyn Error>> {
-    data.things.get_one()?;
+    match data.things.get_one() {
+        Ok(t) => data.hist.insert(&format!("remove {}", t)),
+        Err(e) => return Err(e),
+    }?;
     Ok(())
 }
 
@@ -99,7 +131,7 @@ impl Store {
         })
     }
 
-    fn get_one(&mut self) -> Result<(), Box<dyn Error>> {
+    fn get_one(&mut self) -> Result<String, Box<dyn Error>> {
         let mut rng = rand::thread_rng();
         let thing = match self.data.iter().choose(&mut rng) {
             Some(t) => t.to_string(),
@@ -109,7 +141,7 @@ impl Store {
         };
         self.remove(&thing)?;
         println!("{}", &thing);
-        Ok(())
+        Ok(thing)
     }
 
     fn remove(&mut self, thing: &String) -> Result<(), Box<dyn Error>> {
@@ -157,4 +189,6 @@ enum Commands {
     List,
     /// Remove a thing from the store
     Remove { thing: String },
+    /// Undo the last action you took
+    Undo,
 }
